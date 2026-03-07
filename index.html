@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Le Jeu du 15</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --chalk:#f5f0e8; --chalk-dim:#b8b0a0; --chalk-faint:#4a4038;
+  --board:#182818; --board-dark:#0d160d;
+  --green:#4ade80; --amber:#fbbf24; --red:#f87171;
+  --line:rgba(255,255,255,0.05);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;}
+body{
+  background:var(--board-dark);
+  font-family:'Space Mono',monospace;
+  display:flex;flex-direction:column;
+  height:100dvh;
+  user-select:none;
+}
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:999;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity:.4;
+}
+
+/* ── HEADER ── */
+.header{
+  background:var(--board-dark);
+  padding:5px 10px 4px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+  border-bottom:1px solid rgba(255,255,255,.07);
+  gap:6px;
+}
+.header h1{
+  font-family:'Caveat',cursive;font-size:1.35rem;color:var(--chalk);
+  letter-spacing:.04em;flex-shrink:0;
+}
+
+/* Score — big & prominent */
+.score-block{
+  display:flex;flex-direction:column;align-items:center;
+  background:rgba(251,191,36,.1);
+  border:1.5px solid rgba(251,191,36,.35);
+  border-radius:6px;
+  padding:2px 10px 1px;
+  flex-shrink:0;
+  min-width:58px;
+}
+.score-block .lbl{font-family:'Caveat',cursive;font-size:.7rem;color:rgba(251,191,36,.6);line-height:1;letter-spacing:.08em;}
+.score-block .val{font-family:'Caveat',cursive;font-size:2rem;font-weight:700;line-height:1;color:var(--amber);text-shadow:0 0 16px rgba(251,191,36,.5);}
+
+/* Header icon buttons */
+.hdr-btns{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.hbtn{
+  background:transparent;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:5px;
+  color:var(--chalk-dim);
+  font-size:1rem;
+  width:34px;height:34px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .15s;
+  padding:0;
+}
+.hbtn:active{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);}
+.hbtn.rst{border-color:rgba(248,113,113,.25);color:rgba(248,113,113,.5);}
+.hbtn.rst:active{border-color:var(--red);color:var(--red);background:rgba(248,113,113,.08);}
+.hbtn.share{border-color:rgba(96,165,250,.3);color:rgba(96,165,250,.6);}
+.hbtn.share:active{border-color:#60a5fa;color:#60a5fa;background:rgba(96,165,250,.1);}
+
+/* ── BOARD ── */
+.board{
+  flex:1;background:var(--board);
+  display:flex;flex-direction:column;
+  overflow:hidden;position:relative;
+  padding:6px 8px;
+  gap:5px;
+}
+.board::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(180deg,transparent 0,transparent 37px,var(--line) 37px,var(--line) 38px);
+}
+
+/* ── 4×4 NUMBER GRID ── */
+.nums-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:5px;
+  flex-shrink:0;
+}
+.nc{
+  background:rgba(255,255,255,.03);
+  border:1.5px solid rgba(255,255,255,.08);
+  border-radius:5px;padding:4px 3px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .18s;
+  position:relative;min-height:44px;
+}
+.nc:active{transform:scale(.93);}
+.nc.active {background:rgba(251,191,36,.1); border-color:var(--amber);  box-shadow:0 0 12px rgba(251,191,36,.22);}
+.nc.solved {background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.35);}
+.nc.solved.active{background:rgba(74,222,128,.13);border-color:var(--green);box-shadow:0 0 12px rgba(74,222,128,.25);}
+.nc-d{font-family:'Caveat',cursive;font-size:1.25rem;font-weight:700;line-height:1;color:var(--chalk-dim);}
+.nc-w{font-family:'Caveat',cursive;font-size:.6rem;color:var(--chalk-faint);white-space:nowrap;margin-top:1px;}
+.nc-ck{position:absolute;top:2px;right:4px;font-size:.55rem;color:var(--green);}
+.nc.solved .nc-d{color:var(--green);}
+.nc.solved .nc-w{color:rgba(74,222,128,.5);}
+.nc.active .nc-d{color:var(--amber);}
+.nc.active .nc-w{color:rgba(251,191,36,.7);}
+
+/* ── CHALLENGE STRIP ── */
+.strip{
+  background:rgba(0,0,0,.3);border-radius:5px;
+  padding:5px 12px;border:1px solid rgba(255,255,255,.07);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.st-word{font-family:'Caveat',cursive;font-size:1.7rem;color:var(--chalk);letter-spacing:.12em;flex:0 0 auto;}
+.st-eq  {font-family:'Caveat',cursive;font-size:.78rem;color:var(--chalk-faint);flex:1;line-height:1.6;overflow:hidden;}
+.st-res {font-family:'Caveat',cursive;font-size:1.9rem;font-weight:700;min-width:48px;text-align:right;transition:all .2s;flex-shrink:0;}
+.st-res.ok {color:var(--green);text-shadow:0 0 14px rgba(74,222,128,.5);}
+.st-res.bad{color:var(--red);}
+.st-res.dim{color:var(--chalk-faint);}
+
+/* ── LETTER STEPPERS ── */
+.ltrs-area{
+  flex:1;display:flex;flex-direction:column;
+  justify-content:center;gap:8px;min-height:0;
+}
+.ltrs-row{display:flex;justify-content:center;gap:8px;}
+
+.lc{
+  display:flex;flex-direction:column;align-items:center;
+  background:rgba(255,255,255,.04);
+  border:1.5px solid rgba(96,165,250,.3);
+  border-radius:8px;overflow:hidden;
+  width:68px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.lc.hi{
+  border-color:var(--amber);background:rgba(251,191,36,.07);
+  box-shadow:0 0 10px rgba(251,191,36,.15);
+}
+.ll{
+  font-family:'Caveat',cursive;font-size:1.15rem;color:var(--chalk-dim);
+  line-height:1;padding:4px 0 2px;width:100%;text-align:center;
+  background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.07);
+}
+.lc.hi .ll{color:var(--amber);}
+.lv{
+  font-family:'Caveat',cursive;font-size:1.55rem;font-weight:700;color:var(--amber);
+  line-height:1;padding:5px 0 3px;width:100%;text-align:center;
+}
+.lbtns{display:flex;width:100%;border-top:1px solid rgba(255,255,255,.07);}
+.sb{
+  flex:1;font-family:'Space Mono',monospace;font-size:1.2rem;
+  color:var(--chalk-faint);background:transparent;border:none;
+  cursor:pointer;padding:8px 0;line-height:1;transition:all .1s;
+  /* big touch target */
+  min-height:40px;
+}
+.sb:first-child{border-right:1px solid rgba(255,255,255,.07);}
+.sb:active,.sb.pressing{background:rgba(255,255,255,.12);color:var(--chalk);}
+.lc.hi .sb{color:rgba(251,191,36,.45);}
+.lc.hi .sb:active,.lc.hi .sb.pressing{color:var(--amber);background:rgba(251,191,36,.12);}
+
+/* ── SIGNATURE ── */
+.sig{
+  text-align:center;
+  font-family:'Caveat',cursive;
+  font-size:.8rem;
+  color:rgba(180,160,140,.45);
+  padding:2px 0 4px;
+  flex-shrink:0;
+  letter-spacing:.04em;
+}
+.sig strong{color:rgba(180,160,140,.7);font-weight:600;}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;top:10px;left:50%;
+  transform:translateX(-50%) translateY(-70px);
+  background:rgba(14,24,14,.97);border:1px solid rgba(255,255,255,.14);
+  color:var(--chalk);font-family:'Caveat',cursive;font-size:1.05rem;
+  padding:6px 18px;border-radius:30px;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+  z-index:900;white-space:nowrap;pointer-events:none;
+}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.ok  {border-color:rgba(74,222,128,.5); color:var(--green);}
+.toast.bad {border-color:rgba(248,113,113,.5);color:var(--red);}
+.toast.info{border-color:rgba(96,165,250,.5); color:#93c5fd;}
+
+/* ── OVERLAY ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:800;align-items:center;justify-content:center;backdrop-filter:blur(5px);}
+.overlay.show{display:flex;}
+.ovc{background:var(--board);border:2px solid rgba(255,255,255,.12);border-radius:8px;padding:28px 24px;text-align:center;max-width:320px;width:88%;animation:popIn .4s cubic-bezier(.34,1.56,.64,1);}
+@keyframes popIn{from{transform:scale(.75);opacity:0}to{transform:scale(1);opacity:1}}
+.ov-t{font-family:'Caveat',cursive;font-size:1.9rem;color:var(--chalk);margin-bottom:4px;}
+.ov-s{font-family:'Caveat',cursive;font-size:4.2rem;font-weight:700;color:var(--amber);text-shadow:0 0 22px rgba(251,191,36,.5);line-height:1;margin:10px 0;}
+.ov-m{font-family:'Caveat',cursive;font-size:1rem;color:var(--chalk-faint);line-height:1.5;margin-bottom:18px;white-space:pre-line;}
+.btn-ok{font-family:'Caveat',cursive;font-size:1rem;letter-spacing:.05em;padding:8px;border-radius:3px;border:1px solid var(--green);color:var(--green);cursor:pointer;background:transparent;}
+.btn-ok:active{background:rgba(74,222,128,.1);}
+</style>
+</head>
+<body id="appRoot">
+
+<div class="header">
+  <h1>✦ Le Jeu du 15</h1>
+
+  <div class="score-block">
+    <span class="lbl">SCORE</span>
+    <span class="val" id="scv">0</span>
+  </div>
+
+  <div class="hdr-btns">
+    <!-- Fullscreen -->
+    <button class="hbtn" id="btnFs" onclick="toggleFullscreen()" title="Plein écran">⛶</button>
+    <!-- Share -->
+    <button class="hbtn share" onclick="shareSnapshot()" title="Partager">⬆</button>
+    <!-- Reset -->
+    <button class="hbtn rst" onclick="confirmReset()" title="Réinitialiser">↺</button>
+  </div>
+</div>
+
+<div class="board" id="board">
+  <div class="nums-grid" id="numGrid"></div>
+
+  <div class="strip">
+    <div class="st-word" id="stWord">—</div>
+    <div class="st-eq"   id="stEq"></div>
+    <div class="st-res dim" id="stRes">?</div>
+  </div>
+
+  <div class="ltrs-area" id="ltrsArea"></div>
+</div>
+
+<div class="sig">Un jeu inventé par <strong>Sébastien Dumortier</strong> · <strong>mars 2026</strong></div>
+
+<div class="overlay" id="overlay">
+  <div class="ovc">
+    <div class="ov-t" id="ovT">Partie terminée</div>
+    <div class="ov-s" id="ovS">0</div>
+    <div class="ov-m" id="ovM"></div>
+    <button class="btn-ok" style="width:100%" onclick="resetGame()">↺ Rejouer</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const WORDS = ["ZERO","UN","DEUX","TROIS","QUATRE","CINQ","SIX","SEPT",
+               "HUIT","NEUF","DIX","ONZE","DOUZE","TREIZE","QUATORZE","QUINZE"];
+const ALL_LTRS = [...new Set(WORDS.join('').split(''))].sort();
+
+let vals = {};
+let solved = [];
+let active = 0;
+let gameOver = false;
+
+// ── INIT ──────────────────────────────────────────
+function init() {
+  ALL_LTRS.forEach(l => vals[l] = 0);
+  solved = new Array(16).fill(false);
+  active = 0;
+  gameOver = false;
+  buildNums();
+  revalidateAll();
+  refresh();
+}
+
+// ── NUMBER CARDS ──────────────────────────────────
+function buildNums() {
+  const g = document.getElementById('numGrid');
+  g.innerHTML = '';
+  WORDS.forEach((w, i) => {
+    const d = document.createElement('div');
+    d.className = 'nc'; d.id = `nc${i}`;
+    d.innerHTML = `<span class="nc-d">${i}</span><span class="nc-w">${w}</span>`;
+    d.onclick = () => { if (!gameOver) { active = i; refresh(); } };
+    g.appendChild(d);
+  });
+}
+
+// ── LETTER STEPPERS for active word ───────────────
+function buildLetters(word) {
+  const area = document.getElementById('ltrsArea');
+  area.innerHTML = '';
+
+  const uniq = [...new Set(word.split(''))];
+  const rows = [];
+  for (let i = 0; i < uniq.length; i += 4) rows.push(uniq.slice(i, i + 4));
+
+  rows.forEach(row => {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'ltrs-row';
+    row.forEach(l => {
+      const c = document.createElement('div');
+      c.className = 'lc'; c.id = `lc_${l}`;
+      c.innerHTML =
+        `<span class="ll">${l}</span>` +
+        `<span class="lv" id="lv_${l}">${vals[l]}</span>` +
+        `<div class="lbtns">` +
+          `<button class="sb" id="sb_m_${l}">−</button>` +
+          `<button class="sb" id="sb_p_${l}">+</button>` +
+        `</div>`;
+      rowEl.appendChild(c);
+    });
+    area.appendChild(rowEl);
+  });
+
+  uniq.forEach(l => {
+    attachStep(document.getElementById(`sb_m_${l}`), l, -1);
+    attachStep(document.getElementById(`sb_p_${l}`), l, +1);
+  });
+
+  // highlight repeated letters
+  const counts = {};
+  for (const c of word) counts[c] = (counts[c]||0) + 1;
+  uniq.forEach(l => {
+    document.getElementById(`lc_${l}`)?.classList.toggle('hi', counts[l] > 1);
+  });
+}
+
+// ── STEPPER EVENTS ────────────────────────────────
+let stepTimer = null, stepIval = null;
+
+function attachStep(btn, l, dir) {
+  const start = e => {
+    e.preventDefault();
+    btn.classList.add('pressing');
+    applyStep(l, dir);
+    stepTimer = setTimeout(() => { stepIval = setInterval(() => applyStep(l, dir), 75); }, 320);
+  };
+  const stop = () => {
+    btn.classList.remove('pressing');
+    clearTimeout(stepTimer); clearInterval(stepIval);
+    stepTimer = stepIval = null;
+  };
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup',   stop);
+  btn.addEventListener('pointerleave',stop);
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+function applyStep(l, dir) {
+  vals[l] = (vals[l] ?? 0) + dir;
+  const lv = document.getElementById(`lv_${l}`);
+  if (lv) lv.textContent = vals[l];
+  revalidateAll();
+  refreshStrip();
+  refreshCards();
+  document.getElementById('scv').textContent = calcScore();
+}
+
+function stopStep() {
+  clearTimeout(stepTimer); clearInterval(stepIval);
+  stepTimer = stepIval = null;
+}
+
+// ── SUM ───────────────────────────────────────────
+function wsum(word) {
+  let s = 0;
+  for (const c of word) {
+    if (vals[c] === undefined || vals[c] === null) return null;
+    s += vals[c];
+  }
+  return s;
+}
+
+// ── REVALIDATE ALL ────────────────────────────────
+function revalidateAll() {
+  for (let i = 0; i < 16; i++) solved[i] = (wsum(WORDS[i]) === i);
+  if (!gameOver && solved.every(Boolean)) endGame();
+}
+
+// ── SCORE ─────────────────────────────────────────
+function calcScore() {
+  let s = 0;
+  for (let i = 0; i < 16; i++) { if (solved[i]) s = i+1; else break; }
+  return s;
+}
+
+// ── REFRESH ───────────────────────────────────────
+function refresh() {
+  buildLetters(WORDS[active]);
+  refreshCards();
+  refreshStrip();
+  document.getElementById('scv').textContent = calcScore();
+}
+
+function refreshCards() {
+  for (let i = 0; i < 16; i++) {
+    const c = document.getElementById(`nc${i}`);
+    if (!c) continue;
+    c.className = 'nc' + (solved[i] ? ' solved' : '') + (i === active ? ' active' : '');
+    const old = c.querySelector('.nc-ck'); if (old) old.remove();
+    if (solved[i]) {
+      const ck = document.createElement('span'); ck.className = 'nc-ck'; ck.textContent = '✓'; c.appendChild(ck);
+    }
+  }
+}
+
+function refreshStrip() {
+  const word = WORDS[active];
+  const s = wsum(word);
+  document.getElementById('stWord').textContent = word;
+  const parts = word.split('').map(c => {
+    const v = vals[c];
+    return `<span style="color:var(--amber)">${c}<sub style="font-size:.56em;opacity:.8">${v ?? '?'}</sub></span>`;
+  });
+  document.getElementById('stEq').innerHTML =
+    parts.join('<span style="color:var(--chalk-faint);margin:0 1px">+</span>');
+  const res = document.getElementById('stRes');
+  if (s === null)        { res.textContent = '?';    res.className = 'st-res dim'; }
+  else if (s === active) { res.textContent = '= '+s; res.className = 'st-res ok';  }
+  else                   { res.textContent = s;       res.className = 'st-res bad'; }
+}
+
+// ── END GAME ──────────────────────────────────────
+function endGame() {
+  gameOver = true;
+  const score = calcScore();
+  document.getElementById('ovT').textContent = score === 16 ? '🏆 Parfait !' : 'Partie terminée !';
+  document.getElementById('ovS').textContent = score + ' pt' + (score !== 1 ? 's' : '');
+  const sw = WORDS.filter((_, i) => solved[i]);
+  let msg = score === 16   ? 'Tous les 16 nombres résolus !\nBravo !'
+          : score === 0    ? 'ZÉRO non validé — aucun point.\nRéussis hors chaîne : ' + (sw.join(', ') || 'aucun')
+          : `Chaîne : ZÉRO → ${WORDS[score-1]}\nRéussis au total : ${sw.join(', ')}`;
+  document.getElementById('ovM').textContent = msg;
+  document.getElementById('overlay').classList.add('show');
+}
+
+// ── FULLSCREEN ────────────────────────────────────
+function toggleFullscreen() {
+  const btn = document.getElementById('btnFs');
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+    btn.textContent = '✕';
+    btn.title = 'Quitter le plein écran';
+  } else {
+    document.exitFullscreen();
+    btn.textContent = '⛶';
+    btn.title = 'Plein écran';
+  }
+}
+document.addEventListener('fullscreenchange', () => {
+  const btn = document.getElementById('btnFs');
+  if (!document.fullscreenElement) { btn.textContent = '⛶'; btn.title = 'Plein écran'; }
+});
+
+// ── SHARE / SNAPSHOT ──────────────────────────────
+// Dessine une carte de score sur canvas sans dépendance externe
+async function shareSnapshot() {
+  showToast('Génération…', 'info');
+  await new Promise(r => setTimeout(r, 80));
+
+  try {
+    const score = calcScore();
+    const sw = WORDS.filter((_, i) => solved[i]);
+    const total = sw.length;
+
+    const W = 640, H = 400;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#0d160d';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#182818';
+    ctx.beginPath();
+    roundRect(ctx, 20, 20, W-40, H-40, 16);
+    ctx.fill();
+
+    // Board lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for (let y = 60; y < H-20; y += 38) {
+      ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(W-20, y); ctx.stroke();
+    }
+
+    // Title
+    ctx.font = 'bold 36px Caveat, cursive';
+    ctx.fillStyle = '#f5f0e8';
+    ctx.textAlign = 'center';
+    ctx.fillText('✦ Le Jeu du 15', W/2, 75);
+
+    // Score circle
+    const cx = W/2, cy = 200, r = 72;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(251,191,36,0.12)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(251,191,36,0.5)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.font = 'bold 80px Caveat, cursive';
+    ctx.fillStyle = '#fbbf24';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(score, cx, cy);
+
+    ctx.font = '22px Caveat, cursive';
+    ctx.fillStyle = 'rgba(251,191,36,0.6)';
+    ctx.fillText('SCORE', cx, cy + 88);
+
+    // Numbers grid (mini) — show which are solved
+    const gx = 40, gy = 295, gw = (W - 80) / 16, gh = 30;
+    WORDS.forEach((w, i) => {
+      const x = gx + i * gw;
+      ctx.fillStyle = solved[i] ? 'rgba(74,222,128,0.25)' : 'rgba(255,255,255,0.04)';
+      ctx.strokeStyle = solved[i] ? 'rgba(74,222,128,0.6)' : 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); roundRect(ctx, x+1, gy, gw-3, gh, 3); ctx.fill(); ctx.stroke();
+      ctx.font = (i===active ? 'bold ' : '') + '11px Space Mono, monospace';
+      ctx.fillStyle = solved[i] ? '#4ade80' : 'rgba(255,255,255,0.35)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(i, x + gw/2, gy + gh/2);
+    });
+
+    // Caption
+    ctx.font = '18px Caveat, cursive';
+    ctx.fillStyle = 'rgba(180,160,140,0.5)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`${total} nombre${total>1?'s':''} trouvé${total>1?'s':''}  ·  Sébastien Dumortier  ·  mars 2026`, W/2, H - 26);
+
+    // Export
+    cv.toBlob(async blob => {
+      if (!blob) { showToast('Erreur', 'bad'); return; }
+      const file = new File([blob], 'jeu-du-15.png', { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Le Jeu du 15', text: `Score : ${score} — Jeu du 15 par Sébastien Dumortier` });
+          return;
+        } catch(e) { /* annulé */ }
+      }
+      // Fallback download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'jeu-du-15.png'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      showToast('Image enregistrée !', 'ok');
+    }, 'image/png');
+
+  } catch(e) {
+    showToast('Partage non disponible', 'bad');
+    console.error(e);
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x, y+h, x, y+h-r, r);
+  ctx.lineTo(x, y+r); ctx.arcTo(x, y, x+r, y, r);
+  ctx.closePath();
+}
+
+// ── TOAST ─────────────────────────────────────────
+let toastTm;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + type;
+  clearTimeout(toastTm);
+  toastTm = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── RESET ─────────────────────────────────────────
+function confirmReset() { if (confirm('Réinitialiser la partie ?')) resetGame(); }
+function resetGame() {
+  stopStep();
+  document.getElementById('overlay').classList.remove('show');
+  init();
+}
+
+init();
+</script>
+</body>
+</html>
