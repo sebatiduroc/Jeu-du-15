@@ -132,17 +132,20 @@ body::after{
   justify-content:center;gap:8px;min-height:0;
   padding:0 2px;
 }
-.ltrs-row{display:flex;justify-content:center;gap:8px;width:100%;}
-
+.ltrs-row{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;width:100%;
+}
 .lc{
   display:flex;flex-direction:column;align-items:center;
   background:rgba(255,255,255,.04);
   border:1.5px solid rgba(96,165,250,.3);
   border-radius:8px;overflow:hidden;
-  flex:1;          /* fill row equally, always 4 per row */
   min-width:0;
   transition:border-color .15s,box-shadow .15s;
 }
+.lc-empty{visibility:hidden;}
 .lc.hi{
   border-color:var(--amber);background:rgba(251,191,36,.07);
   box-shadow:0 0 10px rgba(251,191,36,.15);
@@ -311,6 +314,12 @@ function buildLetters(word) {
         `</div>`;
       rowEl.appendChild(c);
     });
+    // Pad to 4 with invisible placeholders so grid stays uniform
+    for (let p = row.length; p < 4; p++) {
+      const ph = document.createElement('div');
+      ph.className = 'lc lc-empty';
+      rowEl.appendChild(ph);
+    }
     area.appendChild(rowEl);
   });
 
@@ -471,90 +480,139 @@ async function shareSnapshot() {
     const score = calcScore();
     const sw = WORDS.filter((_, i) => solved[i]);
     const total = sw.length;
+    const name  = pseudo.trim();
 
-    const W = 640, H = 440;
+    const W = 640, H = 480;
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const ctx = cv.getContext('2d');
 
-    // Background
+    // ── Outer background ──
     ctx.fillStyle = '#0d160d';
     ctx.fillRect(0, 0, W, H);
+
+    // ── Board card ──
     ctx.fillStyle = '#182818';
-    ctx.beginPath();
-    roundRect(ctx, 20, 20, W-40, H-40, 16);
-    ctx.fill();
+    ctx.beginPath(); roundRect(ctx, 16, 16, W-32, H-32, 18); ctx.fill();
 
-    // Board lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    // Subtle chalk lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.045)';
     ctx.lineWidth = 1;
-    for (let y = 60; y < H-20; y += 38) {
-      ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(W-20, y); ctx.stroke();
+    for (let y = 56; y < H-16; y += 38) {
+      ctx.beginPath(); ctx.moveTo(16,y); ctx.lineTo(W-16,y); ctx.stroke();
     }
 
-    // Title
-    ctx.font = 'bold 36px Caveat, cursive';
-    ctx.fillStyle = '#f5f0e8';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('✦ Le Jeu du 15', W/2, 75);
+    // ── Title ──
+    ctx.font = 'bold 32px Georgia, serif';
+    ctx.fillStyle = 'rgba(245,240,232,0.55)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('✦  Le Jeu du 15  ✦', W/2, 58);
 
-    // Pseudo (if provided)
-    if (pseudo.trim()) {
-      ctx.font = 'bold 28px Caveat, cursive';
-      ctx.fillStyle = '#b8b0a0';
-      ctx.textAlign = 'center';
-      ctx.fillText(pseudo.trim(), W/2, 108);
+    // ════════════════════════════════════════
+    // ── HERO PANEL: pseudo + score + horodatage ──
+    // ════════════════════════════════════════
+    const px = 60, py = 76, pw = W-120, ph = name ? 210 : 188;
+
+    // Outer amber glow (shadow layers)
+    for (let i = 3; i >= 1; i--) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(251,191,36,0.35)';
+      ctx.shadowBlur  = i * 18;
+      ctx.strokeStyle = `rgba(251,191,36,${0.12 * i})`;
+      ctx.lineWidth   = i * 2;
+      ctx.beginPath(); roundRect(ctx, px-i*3, py-i*3, pw+i*6, ph+i*6, 16+i*2);
+      ctx.stroke();
+      ctx.restore();
     }
 
-    // Score circle
-    const cy = pseudo.trim() ? 215 : 200;
-    const cx = W/2, r = 72;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(251,191,36,0.12)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(251,191,36,0.5)';
-    ctx.lineWidth = 2.5;
+    // Panel fill — gradient top-to-bottom
+    const grad = ctx.createLinearGradient(px, py, px, py+ph);
+    grad.addColorStop(0,   'rgba(251,191,36,0.18)');
+    grad.addColorStop(0.5, 'rgba(251,191,36,0.10)');
+    grad.addColorStop(1,   'rgba(251,191,36,0.05)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); roundRect(ctx, px, py, pw, ph, 14); ctx.fill();
+
+    // Panel border
+    ctx.strokeStyle = 'rgba(251,191,36,0.65)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); roundRect(ctx, px, py, pw, ph, 14); ctx.stroke();
+
+    // Inner highlight line at top
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px+22, py+1.5); ctx.lineTo(px+pw-22, py+1.5);
     ctx.stroke();
 
-    ctx.font = 'bold 80px Caveat, cursive';
+    let iy = py + 42; // current y inside panel
+
+    // Pseudo
+    if (name) {
+      ctx.font = 'bold 34px Georgia, serif';
+      ctx.fillStyle = '#f5f0e8';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      // subtle text glow
+      ctx.save();
+      ctx.shadowColor = 'rgba(245,240,232,0.5)'; ctx.shadowBlur = 10;
+      ctx.fillText(name, W/2, iy);
+      ctx.restore();
+      iy += 46;
+    }
+
+    // Score value — giant
+    ctx.save();
+    ctx.shadowColor = 'rgba(251,191,36,0.9)'; ctx.shadowBlur = 28;
+    ctx.font = 'bold 86px Georgia, serif';
     ctx.fillStyle = '#fbbf24';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(score, cx, cy);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(score, W/2, iy + 70);
+    ctx.restore();
 
-    ctx.font = '22px Caveat, cursive';
-    ctx.fillStyle = 'rgba(251,191,36,0.6)';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('SCORE', cx, cy + 90);
+    // "SCORE" label below the number
+    ctx.font = '18px Georgia, serif';
+    ctx.fillStyle = 'rgba(251,191,36,0.55)';
+    ctx.letterSpacing = '0.15em';
+    ctx.fillText('SCORE', W/2, iy + 98);
+    iy += 110;
 
-    // Numbers mini-grid
-    const gy = cy + 116;
-    const gw = (W - 80) / 16;
-    WORDS.forEach((w, i) => {
-      const x = 40 + i * gw;
-      ctx.fillStyle = solved[i] ? 'rgba(74,222,128,0.25)' : 'rgba(255,255,255,0.04)';
-      ctx.strokeStyle = solved[i] ? 'rgba(74,222,128,0.6)' : 'rgba(255,255,255,0.1)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath(); roundRect(ctx, x+1, gy, gw-3, 28, 3); ctx.fill(); ctx.stroke();
-      ctx.font = '11px Space Mono, monospace';
-      ctx.fillStyle = solved[i] ? '#4ade80' : 'rgba(255,255,255,0.35)';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(i, x + gw/2, gy + 14);
-    });
+    // Thin separator
+    ctx.strokeStyle = 'rgba(251,191,36,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px+40, iy); ctx.lineTo(px+pw-40, iy);
+    ctx.stroke();
+    iy += 22;
 
     // Date + time
-    ctx.font = '20px Caveat, cursive';
-    ctx.fillStyle = 'rgba(180,160,140,0.55)';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`${dateStr}  ${timeStr}`, W/2, H - 52);
+    ctx.save();
+    ctx.shadowColor = 'rgba(251,191,36,0.4)'; ctx.shadowBlur = 8;
+    ctx.font = 'bold 22px Georgia, serif';
+    ctx.fillStyle = 'rgba(245,240,232,0.82)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`${dateStr}  ·  ${timeStr}`, W/2, iy);
+    ctx.restore();
 
-    // Signature
-    ctx.font = '17px Caveat, cursive';
+    // ── Numbers mini-grid ──
+    const gy = py + ph + 22;
+    const gcols = 16, gw = (W - 80) / gcols;
+    WORDS.forEach((_, i) => {
+      const x = 40 + i * gw;
+      ctx.fillStyle   = solved[i] ? 'rgba(74,222,128,0.22)' : 'rgba(255,255,255,0.04)';
+      ctx.strokeStyle = solved[i] ? 'rgba(74,222,128,0.55)' : 'rgba(255,255,255,0.09)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); roundRect(ctx, x+1, gy, gw-3, 26, 3); ctx.fill(); ctx.stroke();
+      ctx.font = '10px monospace';
+      ctx.fillStyle = solved[i] ? '#4ade80' : 'rgba(255,255,255,0.3)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(i, x + gw/2, gy + 13);
+    });
+
+    // ── Signature ──
+    ctx.font = '15px Georgia, serif';
     ctx.fillStyle = 'rgba(180,160,140,0.38)';
-    ctx.fillText(`${total} nombre${total>1?'s':''} trouvé${total>1?'s':''}  ·  Sébastien Dumortier  ·  mars 2026`, W/2, H - 28);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`${total} nombre${total>1?'s':''} trouvé${total>1?'s':''}  ·  Sébastien Dumortier  ·  mars 2026`, W/2, H - 22);
 
     // Export
     cv.toBlob(async blob => {
