@@ -617,7 +617,8 @@ async function shareSnapshot() {
     // Export
     cv.toBlob(async blob => {
       if (!blob) { showToast('Erreur', 'bad'); return; }
-      const file = new File([blob], 'jeu-du-15.png', { type: 'image/png' });
+      const fname = `jeu-du-15_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
+      const file = new File([blob], fname, { type: 'image/png' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
@@ -627,7 +628,7 @@ async function shareSnapshot() {
       }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = 'jeu-du-15.png'; a.click();
+      a.href = url; a.download = fname; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 3000);
       showToast('Image enregistrée !', 'ok');
     }, 'image/png');
