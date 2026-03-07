@@ -130,15 +130,17 @@ body::after{
 .ltrs-area{
   flex:1;display:flex;flex-direction:column;
   justify-content:center;gap:8px;min-height:0;
+  padding:0 2px;
 }
-.ltrs-row{display:flex;justify-content:center;gap:8px;}
+.ltrs-row{display:flex;justify-content:center;gap:8px;width:100%;}
 
 .lc{
   display:flex;flex-direction:column;align-items:center;
   background:rgba(255,255,255,.04);
   border:1.5px solid rgba(96,165,250,.3);
   border-radius:8px;overflow:hidden;
-  width:68px;
+  flex:1;          /* fill row equally, always 4 per row */
+  min-width:0;
   transition:border-color .15s,box-shadow .15s;
 }
 .lc.hi{
@@ -146,22 +148,21 @@ body::after{
   box-shadow:0 0 10px rgba(251,191,36,.15);
 }
 .ll{
-  font-family:'Caveat',cursive;font-size:1.15rem;color:var(--chalk-dim);
-  line-height:1;padding:4px 0 2px;width:100%;text-align:center;
+  font-family:'Caveat',cursive;font-size:1.3rem;color:var(--chalk-dim);
+  line-height:1;padding:5px 0 3px;width:100%;text-align:center;
   background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.07);
 }
 .lc.hi .ll{color:var(--amber);}
 .lv{
-  font-family:'Caveat',cursive;font-size:1.55rem;font-weight:700;color:var(--amber);
-  line-height:1;padding:5px 0 3px;width:100%;text-align:center;
+  font-family:'Caveat',cursive;font-size:1.9rem;font-weight:700;color:var(--amber);
+  line-height:1;padding:6px 0 4px;width:100%;text-align:center;
 }
 .lbtns{display:flex;width:100%;border-top:1px solid rgba(255,255,255,.07);}
 .sb{
-  flex:1;font-family:'Space Mono',monospace;font-size:1.2rem;
+  flex:1;font-family:'Space Mono',monospace;font-size:1.4rem;
   color:var(--chalk-faint);background:transparent;border:none;
-  cursor:pointer;padding:8px 0;line-height:1;transition:all .1s;
-  /* big touch target */
-  min-height:40px;
+  cursor:pointer;padding:10px 0;line-height:1;transition:all .1s;
+  min-height:46px;
 }
 .sb:first-child{border-right:1px solid rgba(255,255,255,.07);}
 .sb:active,.sb.pressing{background:rgba(255,255,255,.12);color:var(--chalk);}
@@ -454,8 +455,15 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 // ── SHARE / SNAPSHOT ──────────────────────────────
-// Dessine une carte de score sur canvas sans dépendance externe
 async function shareSnapshot() {
+  // Ask for pseudo first
+  const pseudo = prompt('Votre pseudo (pour la carte de score) :', '') ?? '';
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
+  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
   showToast('Génération…', 'info');
   await new Promise(r => setTimeout(r, 80));
 
@@ -464,7 +472,7 @@ async function shareSnapshot() {
     const sw = WORDS.filter((_, i) => solved[i]);
     const total = sw.length;
 
-    const W = 640, H = 400;
+    const W = 640, H = 440;
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const ctx = cv.getContext('2d');
@@ -488,10 +496,20 @@ async function shareSnapshot() {
     ctx.font = 'bold 36px Caveat, cursive';
     ctx.fillStyle = '#f5f0e8';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
     ctx.fillText('✦ Le Jeu du 15', W/2, 75);
 
+    // Pseudo (if provided)
+    if (pseudo.trim()) {
+      ctx.font = 'bold 28px Caveat, cursive';
+      ctx.fillStyle = '#b8b0a0';
+      ctx.textAlign = 'center';
+      ctx.fillText(pseudo.trim(), W/2, 108);
+    }
+
     // Score circle
-    const cx = W/2, cy = 200, r = 72;
+    const cy = pseudo.trim() ? 215 : 200;
+    const cx = W/2, r = 72;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
     ctx.fillStyle = 'rgba(251,191,36,0.12)';
     ctx.fill();
@@ -507,29 +525,36 @@ async function shareSnapshot() {
 
     ctx.font = '22px Caveat, cursive';
     ctx.fillStyle = 'rgba(251,191,36,0.6)';
-    ctx.fillText('SCORE', cx, cy + 88);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('SCORE', cx, cy + 90);
 
-    // Numbers grid (mini) — show which are solved
-    const gx = 40, gy = 295, gw = (W - 80) / 16, gh = 30;
+    // Numbers mini-grid
+    const gy = cy + 116;
+    const gw = (W - 80) / 16;
     WORDS.forEach((w, i) => {
-      const x = gx + i * gw;
+      const x = 40 + i * gw;
       ctx.fillStyle = solved[i] ? 'rgba(74,222,128,0.25)' : 'rgba(255,255,255,0.04)';
       ctx.strokeStyle = solved[i] ? 'rgba(74,222,128,0.6)' : 'rgba(255,255,255,0.1)';
       ctx.lineWidth = 1.2;
-      ctx.beginPath(); roundRect(ctx, x+1, gy, gw-3, gh, 3); ctx.fill(); ctx.stroke();
-      ctx.font = (i===active ? 'bold ' : '') + '11px Space Mono, monospace';
+      ctx.beginPath(); roundRect(ctx, x+1, gy, gw-3, 28, 3); ctx.fill(); ctx.stroke();
+      ctx.font = '11px Space Mono, monospace';
       ctx.fillStyle = solved[i] ? '#4ade80' : 'rgba(255,255,255,0.35)';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(i, x + gw/2, gy + gh/2);
+      ctx.fillText(i, x + gw/2, gy + 14);
     });
 
-    // Caption
-    ctx.font = '18px Caveat, cursive';
-    ctx.fillStyle = 'rgba(180,160,140,0.5)';
+    // Date + time
+    ctx.font = '20px Caveat, cursive';
+    ctx.fillStyle = 'rgba(180,160,140,0.55)';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`${total} nombre${total>1?'s':''} trouvé${total>1?'s':''}  ·  Sébastien Dumortier  ·  mars 2026`, W/2, H - 26);
+    ctx.fillText(`${dateStr}  ${timeStr}`, W/2, H - 52);
+
+    // Signature
+    ctx.font = '17px Caveat, cursive';
+    ctx.fillStyle = 'rgba(180,160,140,0.38)';
+    ctx.fillText(`${total} nombre${total>1?'s':''} trouvé${total>1?'s':''}  ·  Sébastien Dumortier  ·  mars 2026`, W/2, H - 28);
 
     // Export
     cv.toBlob(async blob => {
@@ -542,7 +567,6 @@ async function shareSnapshot() {
           return;
         } catch(e) { /* annulé */ }
       }
-      // Fallback download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = 'jeu-du-15.png'; a.click();
