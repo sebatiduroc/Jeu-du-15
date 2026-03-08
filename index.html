@@ -149,6 +149,24 @@ body::after{
 .btn-ok{font-family:'Caveat',cursive;font-size:1rem;letter-spacing:.05em;padding:8px;border-radius:3px;border:1px solid var(--green);color:var(--green);cursor:pointer;background:transparent;}
 .btn-ok:active{background:rgba(74,222,128,.1);}
 
+/* ── PSEUDO OVERLAY ── */
+#pseudoOverlay .ovc{max-width:300px;}
+.pseudo-label{font-family:'Caveat',cursive;font-size:1.1rem;color:var(--chalk-dim);margin-bottom:10px;display:block;}
+.pseudo-input{
+  width:100%;font-family:'Caveat',cursive;font-size:1.5rem;
+  background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.15);
+  border-radius:6px;color:var(--chalk);padding:8px 12px;outline:none;
+  transition:border-color .15s;
+}
+.pseudo-input:focus{border-color:var(--amber);}
+.pseudo-btn{
+  margin-top:14px;width:100%;font-family:'Caveat',cursive;font-size:1.1rem;
+  letter-spacing:.05em;padding:10px;border-radius:5px;
+  border:1.5px solid var(--amber);color:var(--amber);
+  cursor:pointer;background:rgba(251,191,36,.08);transition:all .15s;
+}
+.pseudo-btn:active{background:rgba(251,191,36,.18);}
+
 /* ── LEADERBOARD OVERLAY ── */
 #lbOverlay .ovc{max-width:380px;padding:20px 18px;text-align:left;}
 .lb-title{font-family:'Caveat',cursive;font-size:1.7rem;color:var(--chalk);text-align:center;margin-bottom:14px;}
@@ -210,6 +228,17 @@ body::after{
   </div>
 </div>
 
+<!-- Pseudo overlay -->
+<div class="overlay" id="pseudoOverlay">
+  <div class="ovc">
+    <div class="ov-t">✦ Le Jeu du 15</div>
+    <div class="ov-m" style="margin-bottom:16px">Entrez votre pseudo pour apparaître dans le classement.</div>
+    <label class="pseudo-label" for="pseudoInput">Votre pseudo</label>
+    <input class="pseudo-input" id="pseudoInput" type="text" maxlength="20" placeholder="ex: Sébastien" autocomplete="off">
+    <button class="pseudo-btn" onclick="savePseudo()">Jouer →</button>
+  </div>
+</div>
+
 <!-- Leaderboard overlay -->
 <div class="overlay" id="lbOverlay">
   <div class="ovc">
@@ -245,11 +274,36 @@ let vals = {};
 let solved = [];
 let active = 0;
 let gameOver = false;
+let lastScore = 0; // track score changes to avoid redundant JSONBin calls
+
+// ── PSEUDO ────────────────────────────────────────
+const LS_PSEUDO = 'jeu15_pseudo';
+function getPseudo() {
+  try { return localStorage.getItem(LS_PSEUDO) || ''; } catch(e) { return ''; }
+}
+function savePseudo() {
+  const val = (document.getElementById('pseudoInput').value || '').trim();
+  if (!val) { document.getElementById('pseudoInput').focus(); return; }
+  try { localStorage.setItem(LS_PSEUDO, val); } catch(e) {}
+  document.getElementById('pseudoOverlay').classList.remove('show');
+  startGame();
+}
+
 // ── INIT ──────────────────────────────────────────
 function init() {
+  const pseudo = getPseudo();
+  if (!pseudo) {
+    // Show pseudo overlay first
+    document.getElementById('pseudoOverlay').classList.add('show');
+    setTimeout(() => document.getElementById('pseudoInput').focus(), 400);
+  } else {
+    startGame();
+  }
+}
+function startGame() {
   ALL_LTRS.forEach(l => vals[l] = 0);
   solved = new Array(16).fill(false);
-  active = 0; gameOver = false;
+  active = 0; gameOver = false; lastScore = 0;
   buildNums(); revalidateAll(); refresh();
 }
 
@@ -344,7 +398,9 @@ function applyStep(l, dir) {
   // Update any repeat displays for same letter (identified by lv_rep_l_*)
   document.querySelectorAll(`[id^="lv_rep_${l}_"]`).forEach(el => el.textContent = vals[l]);
   revalidateAll(); refreshStrip(); refreshCards();
-  document.getElementById('scv').textContent = calcScore();
+  const score = calcScore();
+  document.getElementById('scv').textContent = score;
+  if (score > lastScore) { lastScore = score; maybeSubmitToJsonbin(score); }
 }
 function stopStep() { clearTimeout(stepTimer); clearInterval(stepIval); stepTimer=stepIval=null; }
 
@@ -401,7 +457,6 @@ function endGame() {
     :`Chaîne : ZÉRO → ${WORDS[score-1]}\nRéussis au total : ${sw.join(', ')}`;
   document.getElementById('ovM').textContent=msg;
   document.getElementById('overlay').classList.add('show');
-  if (score > 0) maybeSubmitScore(score);
 }
 
 // ════════════════════════════════════════════════
@@ -416,22 +471,24 @@ function setLocalBest(obj) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch(e) {}
 }
 
-async function maybeSubmitScore(score) {
-  const best = getLocalBest();
-  if (score <= best.score) return; // pas de nouveau record local
+// Called on every score increase during play
+async function maybeSubmitToJsonbin(score) {
+  const pseudo = getPseudo();
+  if (!pseudo || !JSONBIN_CONFIGURED) return;
 
-  // Nouveau record personnel → sauvegarde locale silencieuse
+  // Update local best silently
+  const best = getLocalBest();
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
-  const newBest = {
+  const entry = {
+    pseudo,
     score,
     date: `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`,
     time: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
     ts: now.getTime()
   };
-  setLocalBest(newBest);
+  if (score > best.score) setLocalBest(entry);
 
-  if (!JSONBIN_CONFIGURED) return;
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
       headers: { 'X-Master-Key': JSONBIN_API_KEY }
@@ -439,23 +496,20 @@ async function maybeSubmitScore(score) {
     const data = await res.json();
     const scores = data.record?.scores ?? [];
 
-    // N'envoyer que si score strictement supérieur au 10e du classement
+    // Submit only if strictly better than the lowest score in the list
     const sorted = [...scores].sort((a,b) => b.score - a.score);
-    const lowestTop10 = sorted.length < 10 ? 0 : sorted[9].score;
-    if (score <= lowestTop10) return;
+    const lowestTop = sorted.length < 5 ? 0 : sorted[4].score;
+    if (score <= lowestTop) return;
 
-    // Demander le pseudo — unique moment où on interroge le joueur
-    const pseudo = (prompt('🎉 Nouveau record ! Votre pseudo pour le classement :', '') ?? '').trim();
-    if (!pseudo) return;
-
-    scores.push({ pseudo, ...newBest });
-    if (scores.length > 200) scores.splice(0, scores.length - 200);
+    scores.push(entry);
+    // Keep only top 5
+    scores.sort((a,b) => b.score - a.score || a.ts - b.ts);
+    scores.splice(5);
     await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
       body: JSON.stringify({ scores })
     });
-    showToast(`🏆 Score ${score} au classement !`, 'ok');
   } catch(e) { console.error('Leaderboard error:', e); }
 }
 
@@ -488,7 +542,7 @@ async function renderLb() {
   try {
     const scores = await loadScores();
     if (!scores.length) { list.innerHTML=`<div class="lb-empty">Aucun score enregistré.</div>`; return; }
-    const rows = [...scores].sort((a,b) => b.score-a.score || a.ts-b.ts).slice(0,10);
+    const rows = [...scores].sort((a,b) => b.score-a.score || a.ts-b.ts).slice(0,5);
     // Highlight local best
     const localBest = getLocalBest().score;
     list.innerHTML = rows.map((r, i) => {
@@ -539,7 +593,7 @@ document.addEventListener('fullscreenchange',()=>{
 
 // ── SHARE / SNAPSHOT ──────────────────────────────
 async function shareSnapshot() {
-  const pseudo = (prompt('Votre pseudo (pour la carte de score) :', '') ?? '').trim();
+  const pseudo = getPseudo();
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
   const dateStr=`${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
@@ -640,8 +694,16 @@ function showToast(msg,type=''){
 // ── RESET ─────────────────────────────────────────
 function confirmReset(){if(confirm('Réinitialiser la partie ?'))resetGame();}
 function resetGame(){
-  stopStep(); document.getElementById('overlay').classList.remove('show'); init();
+  stopStep();
+  document.getElementById('overlay').classList.remove('show');
+  lastScore = 0;
+  startGame();
 }
+
+// Allow Enter key in pseudo input
+document.getElementById('pseudoInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') savePseudo();
+});
 
 init();
 </script>
