@@ -259,8 +259,7 @@ body::after{
 <!-- Leaderboard overlay -->
 <div class="overlay" id="lbOverlay">
   <div class="ovc">
-    <div class="lb-title">🏆 Classement</div>
-
+    <div class="lb-title">🏆 Records des 30 derniers jours</div>
     <div class="lb-list" id="lbList"></div>
     <div class="lb-footer">
       <button class="btn-ok" onclick="closeLb()">Fermer</button>
@@ -272,15 +271,15 @@ body::after{
 
 <script>
 // ════════════════════════════════════════════════
-//  ⚙️  CONFIGURATION JSONBIN  — à remplir !
-//  1. Créez un compte sur https://jsonbin.io
-//  2. Créez un bin avec ce contenu initial : {"scores":[]}
-//  3. Copiez votre BIN ID et votre clé API X-Master-Key ci-dessous
+//  ⚙️  CONFIGURATION JSONBIN
 // ════════════════════════════════════════════════
 const JSONBIN_BIN_ID  = '69aca1ec43b1c97be9bee075';
 const JSONBIN_API_KEY = '$2a$10$KF8MxpCoz7EiaFpfywvUvel.9yrVRPB.gl670nIVTkj1qJ7MtVor6';
 const JSONBIN_URL     = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 const JSONBIN_CONFIGURED = JSONBIN_BIN_ID !== 'VOTRE_BIN_ID_ICI';
+
+// Durée de rétention des scores : 30 jours en millisecondes
+const SCORE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 // ════════════════════════════════════════════════
 const WORDS = ["ZERO","UN","DEUX","TROIS","QUATRE","CINQ","SIX","SEPT",
@@ -291,7 +290,7 @@ let vals = {};
 let solved = [];
 let active = 0;
 let gameOver = false;
-let lastScore = 0; // track score changes to avoid redundant JSONBin calls
+let lastScore = 0;
 
 // ── PSEUDO ────────────────────────────────────────
 const LS_PSEUDO = 'jeu15_pseudo';
@@ -310,7 +309,6 @@ function savePseudo() {
 function init() {
   const pseudo = getPseudo();
   if (!pseudo) {
-    // Show pseudo overlay first
     document.getElementById('pseudoOverlay').classList.add('show');
     setTimeout(() => document.getElementById('pseudoInput').focus(), 400);
   } else {
@@ -342,9 +340,6 @@ function buildLetters(word) {
   const area = document.getElementById('ltrsArea');
   area.innerHTML = '';
 
-  // Build the display sequence: each letter of the word in order,
-  // but de-duplicate while tracking which occurrence index each slot is.
-  // First occurrence → full stepper; subsequent occurrences → readonly display.
   const seen = {};
   const slots = word.split('').map(l => {
     const n = (seen[l] = (seen[l]||0) + 1);
@@ -370,7 +365,6 @@ function buildLetters(word) {
             `<button class="sb" id="sb_p_${l}">+</button>` +
           `</div>`;
       } else {
-        // Repeat occurrence: show letter + current value, no buttons
         c.innerHTML =
           `<span class="ll">${l}</span>` +
           `<span class="lv" id="lv_rep_${l}_${Math.random().toString(36).slice(2)}">${vals[l]}</span>` +
@@ -384,7 +378,6 @@ function buildLetters(word) {
     area.appendChild(rowEl);
   });
 
-  // Attach steppers only to first occurrences
   [...new Set(word.split(''))].forEach(l => {
     attachStep(document.getElementById(`sb_m_${l}`), l, -1);
     attachStep(document.getElementById(`sb_p_${l}`), l, +1);
@@ -409,10 +402,8 @@ function attachStep(btn, l, dir) {
 }
 function applyStep(l, dir) {
   vals[l] = (vals[l]??0) + dir;
-  // Update primary display
   const lv = document.getElementById(`lv_${l}`);
   if (lv) lv.textContent = vals[l];
-  // Update any repeat displays for same letter (identified by lv_rep_l_*)
   document.querySelectorAll(`[id^="lv_rep_${l}_"]`).forEach(el => el.textContent = vals[l]);
   revalidateAll(); refreshStrip(); refreshCards();
   const score = calcScore();
@@ -486,12 +477,22 @@ function setLocalBest(obj) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch(e) {}
 }
 
-// Called on every score increase during play
+// Retourne les scores récents (moins de 30 jours) depuis JSONBin
+async function loadScores() {
+  const res = await fetch(JSONBIN_URL + '/latest', {
+    headers: { 'X-Master-Key': JSONBIN_API_KEY }
+  });
+  const data = await res.json();
+  const scores = data.record?.scores ?? [];
+  const cutoff = Date.now() - SCORE_RETENTION_MS;
+  return scores.filter(r => r.ts && r.ts >= cutoff);
+}
+
+// Appelée à chaque amélioration de score pendant la partie
 async function maybeSubmitToJsonbin(score) {
   const pseudo = getPseudo();
   if (!pseudo || !JSONBIN_CONFIGURED) return;
 
-  // Update local best silently
   const best = getLocalBest();
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
@@ -509,31 +510,27 @@ async function maybeSubmitToJsonbin(score) {
       headers: { 'X-Master-Key': JSONBIN_API_KEY }
     });
     const data = await res.json();
-    const scores = data.record?.scores ?? [];
+    const allScores = data.record?.scores ?? [];
 
-    // Submit only if strictly better than the lowest score in the list
-    const sorted = [...scores].sort((a,b) => b.score - a.score);
+    // Purger les scores de plus de 30 jours
+    const cutoff = Date.now() - SCORE_RETENTION_MS;
+    const fresh = allScores.filter(r => r.ts && r.ts >= cutoff);
+
+    // Soumettre uniquement si meilleur que le 5e score du classement récent
+    const sorted = [...fresh].sort((a,b) => b.score - a.score);
     const lowestTop = sorted.length < 5 ? 0 : sorted[4].score;
     if (score <= lowestTop) return;
 
-    scores.push(entry);
-    // Keep only top 5
-    scores.sort((a,b) => b.score - a.score || a.ts - b.ts);
-    scores.splice(5);
+    fresh.push(entry);
+    fresh.sort((a,b) => b.score - a.score || a.ts - b.ts);
+    fresh.splice(5);
+
     await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
-      body: JSON.stringify({ scores })
+      body: JSON.stringify({ scores: fresh })
     });
   } catch(e) { console.error('Leaderboard error:', e); }
-}
-
-async function loadScores() {
-  const res = await fetch(JSONBIN_URL + '/latest', {
-    headers: { 'X-Master-Key': JSONBIN_API_KEY }
-  });
-  const data = await res.json();
-  return data.record?.scores ?? [];
 }
 
 // ════════════════════════════════════════════════
@@ -558,7 +555,6 @@ async function renderLb() {
     const scores = await loadScores();
     if (!scores.length) { list.innerHTML=`<div class="lb-empty">Aucun score enregistré.</div>`; return; }
     const rows = [...scores].sort((a,b) => b.score-a.score || a.ts-b.ts).slice(0,5);
-    // Highlight local best
     const localBest = getLocalBest().score;
     list.innerHTML = rows.map((r, i) => {
       const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
@@ -571,7 +567,6 @@ async function renderLb() {
         <span class="lb-date">${r.date??''}<br>${r.time??''}</span>
       </div>`;
     }).join('');
-    // Show local best below if not in top 10
     const localInTop = rows.some(r => r.score === localBest);
     if (localBest > 0 && !localInTop) {
       list.innerHTML += `<div class="lb-row" style="margin-top:8px;border-top:1px solid rgba(251,191,36,.2);padding-top:10px">
@@ -715,7 +710,6 @@ function resetGame(){
   startGame();
 }
 
-// Allow Enter key in pseudo input
 function openRules() {
   document.getElementById('rulesOverlay').classList.add('show');
 }
@@ -726,6 +720,11 @@ function closeRules() {
 document.getElementById('pseudoInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') savePseudo();
 });
+
+// Enregistrement du Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
 
 init();
 </script>
