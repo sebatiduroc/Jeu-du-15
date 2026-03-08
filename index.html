@@ -148,6 +148,10 @@ body::after{
 .ov-m{font-family:'Caveat',cursive;font-size:1rem;color:var(--chalk-faint);line-height:1.5;margin-bottom:18px;white-space:pre-line;}
 .btn-ok{font-family:'Caveat',cursive;font-size:1rem;letter-spacing:.05em;padding:8px;border-radius:3px;border:1px solid var(--green);color:var(--green);cursor:pointer;background:transparent;}
 .btn-ok:active{background:rgba(74,222,128,.1);}
+.rules-body{text-align:left;margin-bottom:20px;}
+.rules-body p{font-family:'Caveat',cursive;font-size:1.25rem;color:var(--chalk);line-height:1.55;margin-bottom:10px;}
+.rules-body p:last-child{margin-bottom:0;}
+.rh{color:var(--amber);font-weight:700;letter-spacing:.04em;}
 
 /* ── PSEUDO OVERLAY ── */
 #pseudoOverlay .ovc{max-width:300px;}
@@ -193,7 +197,7 @@ body::after{
 <body id="appRoot">
 
 <div class="header">
-  <h1>✦ Le Jeu du 15</h1>
+  <h1 onclick="openRules()" style="cursor:pointer" title="Règles du jeu">✦ Le Jeu du 15</h1>
   <div class="score-block">
     <span class="lbl">SCORE</span>
     <span class="val" id="scv">0</span>
@@ -210,7 +214,6 @@ body::after{
   <div class="nums-grid" id="numGrid"></div>
   <div class="strip">
     <div class="st-word" id="stWord">—</div>
-    <div class="st-eq"   id="stEq"></div>
     <div class="st-res dim" id="stRes">?</div>
   </div>
   <div class="ltrs-area" id="ltrsArea"></div>
@@ -225,6 +228,20 @@ body::after{
     <div class="ov-s" id="ovS">0</div>
     <div class="ov-m" id="ovM"></div>
     <button class="btn-ok" style="width:100%" onclick="resetGame()">↺ Rejouer</button>
+  </div>
+</div>
+
+<!-- Rules overlay -->
+<div class="overlay" id="rulesOverlay">
+  <div class="ovc">
+    <div class="ov-t">Comment jouer ?</div>
+    <div class="rules-body">
+      <p>Attribuez une valeur entière à chaque lettre de l'alphabet.</p>
+      <p>Le but : que la somme des lettres de chaque mot soit égale au nombre qu'il représente.</p>
+      <p><span class="rh">ZERO</span> doit valoir 0, <span class="rh">UN</span> doit valoir 1… jusqu'à <span class="rh">QUINZE</span> = 15.</p>
+      <p>Le score est la plus longue chaîne consécutive depuis ZÉRO.</p>
+    </div>
+    <button class="btn-ok" style="width:100%" onclick="closeRules()">C'est parti !</button>
   </div>
 </div>
 
@@ -437,8 +454,6 @@ function refreshCards() {
 function refreshStrip() {
   const word=WORDS[active], s=wsum(word);
   document.getElementById('stWord').textContent=word;
-  const parts=word.split('').map(c=>`<span style="color:var(--amber)">${c}<sub style="font-size:.56em;opacity:.8">${vals[c]??'?'}</sub></span>`);
-  document.getElementById('stEq').innerHTML=parts.join('<span style="color:var(--chalk-faint);margin:0 1px">+</span>');
   const res=document.getElementById('stRes');
   if(s===null){res.textContent='?';res.className='st-res dim';}
   else if(s===active){res.textContent='= '+s;res.className='st-res ok';}
@@ -701,6 +716,13 @@ function resetGame(){
 }
 
 // Allow Enter key in pseudo input
+function openRules() {
+  document.getElementById('rulesOverlay').classList.add('show');
+}
+function closeRules() {
+  document.getElementById('rulesOverlay').classList.remove('show');
+}
+
 document.getElementById('pseudoInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') savePseudo();
 });
